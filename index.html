@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>카톡 AI 어시스턴트</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap top">
+      <div class="brand"><span class="brand-icon" aria-hidden="true"></span>카톡 AI 어시스턴트</div>
+      <span class="local"><span aria-hidden="true"></span>이 Mac에서 실행</span>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">실시간 AI 어시스턴트</p>
+        <h1 id="page-title">단톡방 AI 어시스턴트</h1>
+        <p class="subtext" id="schedule-summary">설정한 간격마다 단톡방 대화를 판독해요.</p>
+      </div>
+      <div class="bubble-art" aria-hidden="true">
+        <i></i><i></i><i></i>
+      </div>
+    </section>
+    <section class="control" aria-labelledby="connection-title">
+      <div>
+        <p class="eyebrow" id="connection-title">연결 상태</p>
+        <p class="state" id="status" role="status" data-kind="idle">상태 확인 중</p>
+        <p id="detail" class="muted">카카오톡 연결을 확인하고 있어요.</p>
+      </div>
+      <div class="actions">
+        <button id="open-settings" class="secondary" type="button">판독 설정</button>
+        <button id="api-test" class="secondary" type="button" disabled>API 테스트</button>
+        <button id="toggle" type="button" disabled>연결 확인 중</button>
+      </div>
+    </section>
+    <p id="settings-open-error" class="settings-error muted" role="alert" hidden>판독 설정을 불러오지 못했어요. 잠시 후 다시 열어 주세요.</p>
+    <section aria-label="주제 판독 현황" class="metrics">
+      <dl>
+        <div><dt>다음 판독</dt><dd><strong id="next-run">—</strong><small id="interval-label">한국 시간</small></dd></div>
+        <div><dt>최근 판독 결과</dt><dd><strong id="topic">—</strong><small id="tone">아직 판독 전</small></dd></div>
+        <div><dt>전송 확인</dt><dd><strong id="sent">—</strong><small id="delivery-label">카카오톡 · 이번 실행</small></dd></div>
+      </dl>
+    </section>
+    <section class="activity" aria-labelledby="activity-title">
+      <div class="section-head">
+        <h2 id="activity-title">최근 활동</h2>
+        <span id="last-check" class="muted">아직 확인 전</span>
+      </div>
+      <ol id="activity-list" class="activity-list">
+        <li class="empty">최근 활동을 확인하고 있어요.</li>
+      </ol>
+    </section>
+    <details id="latest-message" class="result-panel" open hidden>
+      <summary>최근 카톡 전송 형식</summary>
+      <pre id="latest-notice"></pre>
+    </details>
+    <details id="latest-result" class="result-panel" hidden>
+      <summary>최근 판정 JSON</summary>
+      <pre id="latest-json"></pre>
+    </details>
+    <footer><span id="memory-status">대화 메모리 확인 중</span> · 판독에 필요한 최근 텍스트는 OpenAI Responses API로 전달돼요.</footer>
+  </main>
+  <dialog id="settings-dialog" aria-labelledby="settings-heading">
+    <form id="settings-form">
+      <header class="settings-head">
+        <div><h2 id="settings-heading">어시스턴트 설정</h2><p class="muted">OpenAI Responses</p></div>
+        <button id="close-settings" class="secondary" type="button" aria-label="설정 닫기">닫기</button>
+      </header>
+      <div class="settings-body">
+        <section class="settings-section" aria-labelledby="schedule-heading">
+          <h3 id="schedule-heading">판독 일정</h3>
+          <div class="field-grid">
+            <label>판독 간격 (분)<input name="interval_minutes" type="number" min="1" max="60" required></label>
+            <label>실시간 탐지 간격 (초)<input name="poll_seconds" type="number" min="1" max="30" required></label>
+            <label>일반 대화 대기 (초)<input name="quiet_seconds" type="number" min="1" max="30" required></label>
+            <label>대화 맥락 범위 (분)<input name="context_minutes" type="number" min="10" max="360" required></label>
+            <label>한 번에 읽을 최대 메시지 수<input name="read_limit" type="number" min="10" max="100" required></label>
+          </div>
+          <label class="check-label"><input name="post_to_chat" type="checkbox">판독 결과를 단톡방에 전송</label>
+          <p class="muted">설정한 맥락 범위 내에서 읽을 수 있는 메시지를 참고하고, 새 중요 내용만 전송해요. 전송을 끄면 이 화면에서만 볼 수 있어요.</p>
+        </section>
+        <section class="settings-section" aria-labelledby="questions-heading">
+          <div class="section-head"><h3 id="questions-heading">판정 질문</h3><span class="muted"><code id="settings-model">—</code></span></div>
+          <div id="question-list" class="question-list"></div>
+          <button id="add-question" type="button" class="secondary">질문 추가</button>
+          <label class="check-label"><input name="full_answers" type="checkbox">고정 선지·척도 질문에 상위 3개 확률 포함</label>
+          <p class="muted">확률과 확신도는 모델이 추정한 값이에요.</p>
+          <details class="advanced-options">
+            <summary>고급 요청 옵션</summary>
+            <label>옵션 JSON<textarea name="api_options" rows="4" spellcheck="false"></textarea></label>
+            <p class="muted"><code>prompt_cache_key</code>, <code>prompt_cache_options</code>, <code>safety_identifier</code>를 설정할 수 있어요.</p>
+          </details>
+        </section>
+        <section class="settings-section" aria-labelledby="preview-heading">
+          <h3 id="preview-heading">예시로 테스트</h3>
+          <label>테스트 문장<textarea name="sample" rows="3" maxlength="4000" placeholder="줄마다 메시지 한 건을 입력하세요."></textarea></label>
+          <div class="test-row">
+            <button id="test-settings" type="button" class="secondary">현재 설정으로 실행</button>
+            <span id="preview-status" class="muted" role="status">비워두면 기본 예시로 테스트해요.</span>
+          </div>
+          <pre id="settings-result" hidden></pre>
+          <details id="settings-json-details" class="advanced-options" hidden>
+            <summary>판정 JSON 확인</summary>
+            <pre id="settings-json"></pre>
+          </details>
+        </section>
+      </div>
+      <footer class="settings-footer">
+        <p id="settings-message" role="alert" hidden></p>
+        <div class="settings-footer-actions">
+          <button id="restore-settings" class="secondary" type="button">기본값 불러오기</button>
+          <button id="save-settings" type="submit">설정 저장</button>
+        </div>
+      </footer>
+    </form>
+  </dialog>
+  <template id="question-template">
+    <fieldset class="question-card">
+      <legend></legend>
+      <div class="question-head"><button type="button" class="secondary remove-question">질문 삭제</button></div>
+      <div class="field-grid">
+        <label>응답 이름<input class="question-name" maxlength="80" required placeholder="topic"></label>
+        <label>판정 유형<select class="question-type"><option value="assistant">AI 어시스턴트</option><option value="digest">핵심 요약</option><option value="ranked">자유 순위</option><option value="choice">선택 (choice)</option><option value="predicate">조건 (predicate)</option><option value="score">척도 (score)</option></select></label>
+      </div>
+      <label>모델에 줄 지침<textarea class="question-instructions" rows="3" maxlength="3000" required></textarea></label>
+      <label class="question-rank" hidden>최대 출력 개수<input class="question-rank-count" type="number" min="1" max="10" value="3"><small>선지를 미리 정하지 않고 모델이 대화에서 직접 이름과 비중을 만들어요.</small></label>
+      <label class="question-options"><span></span><textarea rows="4"></textarea><small></small></label>
+    </fieldset>
+  </template>
+</body>
+</html>
